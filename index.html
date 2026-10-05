@@ -56,25 +56,23 @@
         const ctx = canvas.getContext('2d');
         const scoreElement = document.getElementById('score');
 
-        // 가로 9열, 세로 16행 구조 유지
         const COLS = 9;
         const ROWS = 16;
         let score = 0;
         let grid = [];
+        
+        // 💡 튕겨 나가는 사과 파티클들을 관리하는 배열 추가
+        let particles = [];
+        let animationId = null;
 
-        // 드래그 상태 관리
         let isDragging = false;
         let startX = 0, startY = 0;
         let currentX = 0, currentY = 0;
 
-        // 사과 1칸의 고정 크기
         const APPLE_SIZE_BASE = 40;
-
-        // 상하좌우 반 칸(20px) 여백 공간 변수 설정
         const PADDING_X = APPLE_SIZE_BASE * 0.5;
         const PADDING_Y = APPLE_SIZE_BASE * 0.5;
 
-        // 해상도 계산
         const CANVAS_WIDTH = (COLS * APPLE_SIZE_BASE) + (PADDING_X * 2);
         const CANVAS_HEIGHT = (ROWS * APPLE_SIZE_BASE) + (PADDING_Y * 2); 
         canvas.width = CANVAS_WIDTH;
@@ -83,7 +81,6 @@
         const CELL_W = APPLE_SIZE_BASE;
         const CELL_H = APPLE_SIZE_BASE;
 
-        // 사과 이미지 객체 생성 및 로드
         const appleImg = new Image();
         appleImg.src = 'apple.png';
         
@@ -91,14 +88,13 @@
             initGame();
         };
 
-        // 이미지 캐싱 예외처리 방어 로직
         if (appleImg.complete) {
             setTimeout(() => { if(grid.length === 0) initGame(); }, 50);
         }
 
-        // 1. 사과 데이터 초기화
         function initGame() {
             grid = [];
+            particles = [];
             for (let r = 0; r < ROWS; r++) {
                 grid[r] = [];
                 for (let c = 0; c < COLS; c++) {
@@ -111,7 +107,6 @@
             draw();
         }
 
-        // 드래그 영역 계산 함수
         function getDragArea() {
             return {
                 x1: Math.min(startX, currentX),
@@ -127,7 +122,7 @@
 
             const dragArea = isDragging ? getDragArea() : null;
 
-            // 사과 및 숫자 그리기
+            // 정지된 기본 사과 및 숫자 그리기
             for (let r = 0; r < ROWS; r++) {
                 for (let c = 0; c < COLS; c++) {
                     const apple = grid[r][c];
@@ -139,7 +134,6 @@
                     const appleX = x + CELL_W / 2;
                     const appleY = y + CELL_H / 2;
 
-                    // 현재 사과가 드래그 영역 안에 있는지 체크
                     let isSelected = false;
                     if (dragArea) {
                         if (appleX >= dragArea.x1 && appleX <= dragArea.x2 && appleY >= dragArea.y1 && appleY <= dragArea.y2) {
@@ -148,19 +142,13 @@
                     }
 
                     const appleSize = CELL_W * 1.1; 
-                    const offsetX = (appleSize - CELL_W) / 2;
-                    const offsetY = (appleSize - CELL_H) / 2;
-                    const drawX = x - offsetX;
-                    const drawY = y - offsetY;
+                    const drawX = x - (appleSize - CELL_W) / 2;
+                    const drawY = y - (appleSize - CELL_H) / 2;
 
-                    // 💡 유저님이 요청하신 '3px 두께의 선명한 이미지 스프라이트 외곽선' 구현
                     if (isSelected) {
                         ctx.save();
                         const thickness = 3;
-                        // 선명한 파란색 단색 라인을 따주는 컬러 필터 매핑
                         ctx.filter = "brightness(0) saturate(100%) invert(53%) sepia(93%) saturate(2644%) hue-rotate(174deg) brightness(104%) contrast(106%)"; 
-                        
-                        // 3px 외곽선의 촘촘한 정밀도를 위해 8방향 겹쳐 그리기 처리
                         for (let dx = -thickness; dx <= thickness; dx += thickness) {
                             for (let dy = -thickness; dy <= thickness; dy += thickness) {
                                 if (dx === 0 && dy === 0) continue;
@@ -170,53 +158,94 @@
                         ctx.restore();
                     }
 
-                    // 원본 사과 이미지 출력 (브라우저 충돌을 피하기 위해 필터를 완전히 제거했습니다)
                     ctx.drawImage(appleImg, drawX, drawY, appleSize, appleSize);
 
-                    // 숫자 텍스트 설정
+                    // 숫자 텍스트
                     ctx.fillStyle = '#ffffff';
                     ctx.font = `bold ${CELL_W * 0.35}px sans-serif`;
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'middle';
-                    
                     ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
                     ctx.lineWidth = 2.5;
 
-                    // 정중앙 10% 하단 최적화 정렬 위치 유지
                     const textY = y + CELL_H / 2 + (CELL_H * 0.1);
-                    
                     ctx.strokeText(apple.number, x + CELL_W / 2, textY);
                     ctx.fillText(apple.number, x + CELL_W / 2, textY);
                 }
             }
 
-            // 드래그 중일 때 선택 영역 박스 표시
+            // 💡 [새로 추가] 튕겨 나가는 파티클 사과 실시간 그리기
+            particles.forEach(p => {
+                ctx.save();
+                ctx.globalAlpha = p.alpha; // 서서히 투명해지게 처리
+                
+                // 사과 그리기
+                ctx.drawImage(appleImg, p.x - p.size/2, p.y - p.size/2, p.size, p.size);
+                
+                // 숫자 텍스트 그리기
+                ctx.fillStyle = '#ffffff';
+                ctx.font = `bold ${p.size * 0.32}px sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
+                ctx.lineWidth = 2;
+                
+                ctx.strokeText(p.number, p.x, p.y + (p.size * 0.1));
+                ctx.fillText(p.number, p.x, p.y + (p.size * 0.1));
+                ctx.restore();
+            });
+
+            // 드래그 박스 표시
             if (isDragging) {
                 ctx.strokeStyle = 'rgba(0, 150, 255, 0.35)';
                 ctx.lineWidth = 1.5;
                 ctx.fillStyle = 'rgba(0, 150, 255, 0.04)';
-                
                 const width = currentX - startX;
                 const height = currentY - startY;
-                
                 ctx.fillRect(startX, startY, width, height);
                 ctx.strokeRect(startX, startY, width, height);
             }
         }
 
-        // 3. 좌표 변환 함수 (기존 초기 안정형 마우스/터치 호환 코드로 롤백)
+        // 💡 [새로 추가] 물리 효과 애니메이션 루프 업데이트
+        function updateParticles() {
+            let hasActiveParticles = false;
+
+            particles.forEach(p => {
+                p.x += p.vx; // 좌우 이동
+                p.y += p.vy; // 상하 이동
+                p.vy += p.gravity; // 중력 적용 (아래로 당겨짐)
+                p.alpha -= 0.02; // 회전하며 서서히 소멸 효과
+
+                if (p.alpha > 0) {
+                    hasActiveParticles = true;
+                }
+            });
+
+            // 투명도가 끝난 죽은 파티클은 배열에서 제거
+            particles = particles.filter(p => p.alpha > 0);
+
+            draw();
+
+            // 아직 화면에 튕겨 나가는 사과가 있다면 다음 프레임 요청 (60fps 무한 부드러움)
+            if (hasActiveParticles) {
+                animationId = requestAnimationFrame(updateParticles);
+            } else {
+                cancelAnimationFrame(animationId);
+                animationId = null;
+            }
+        }
+
         function getCanvasCoords(e) {
             const rect = canvas.getBoundingClientRect();
-            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-
+            const clientX = e.touches ? e.touches[clientX] : e.clientX;
+            const clientY = e.touches ? e.touches.clientY : e.clientY;
             return {
                 x: (clientX - rect.left) * (CANVAS_WIDTH / rect.width),
                 y: (clientY - rect.top) * (CANVAS_HEIGHT / rect.height)
             };
         }
 
-        // 4. 드래그 시작 이벤트
         function onStart(e) {
             if (e.cancelable) e.preventDefault();
             isDragging = true;
@@ -226,7 +255,6 @@
             draw();
         }
 
-        // 5. 드래그 중 이벤트
         function onMove(e) {
             if (!isDragging) return;
             if (e.cancelable) e.preventDefault();
@@ -236,7 +264,6 @@
             draw();
         }
 
-        // 6. 드래그 종료 및 조건 검증
         function onEnd(e) {
             if (!isDragging) return;
             isDragging = false;
@@ -255,27 +282,10 @@
 
                     if (appleX >= dragArea.x1 && appleX <= dragArea.x2 && appleY >= dragArea.y1 && appleY <= dragArea.y2) {
                         sum += apple.number;
-                        selectedApples.push(apple);
+                        // 보드 상의 좌표 정보도 함께 저장
+                        selectedApples.push({ apple, r, c });
                     }
                 }
             }
 
             if (sum === 10 && selectedApples.length > 0) {
-                selectedApples.forEach(apple => apple.isCleared = true);
-                score += selectedApples.length;
-                scoreElement.innerText = score;
-            }
-
-            draw();
-        }
-
-        canvas.addEventListener('mousedown', onStart);
-        canvas.addEventListener('mousemove', onMove);
-        window.addEventListener('mouseup', onEnd);
-
-        canvas.addEventListener('touchstart', onStart, { passive: false });
-        canvas.addEventListener('touchmove', onMove, { passive: false });
-        window.addEventListener('touchend', onEnd);
-    </script>
-</body>
-</html>

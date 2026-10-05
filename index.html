@@ -5,43 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>HTML5 모바일 사과게임</title>
     <style>
-        * {
-            box-sizing: border-box;
-            user-select: none;
-            -webkit-user-select: none;
-        }
-        body {
-            margin: 0;
-            padding: 0;
-            background-color: #f0f0f0;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            font-family: sans-serif;
-            height: 100vh;
-        }
-        #score-board {
-            font-size: 24px;
-            font-weight: bold;
-            margin-bottom: 10px;
-            color: #333;
-        }
-        #game-container {
-            position: relative;
-            width: 100%;
-            max-width: 450px;
-            aspect-ratio: 10 / 17;
-            background-color: #fff;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-            overflow: hidden;
-            touch-action: none;
-        }
-        #game-canvas {
-            width: 100%;
-            height: 100%;
-            display: block;
-        }
+        * { box-sizing: border-box; user-select: none; -webkit-user-select: none; }
+        body { margin: 0; padding: 0; background-color: #f0f0f0; display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: sans-serif; height: 100vh; }
+        #score-board { font-size: 24px; font-weight: bold; margin-bottom: 10px; color: #333; }
+        #game-container { position: relative; width: 100%; max-width: 450px; aspect-ratio: 10 / 17; background-color: #fff; box-shadow: 0 4px 10px rgba(0,0,0,0.1); overflow: hidden; touch-action: none; }
+        #game-canvas { width: 100%; height: 100%; display: block; }
     </style>
 </head>
 <body>
@@ -52,240 +20,172 @@
     </div>
 
     <script>
-        const canvas = document.getElementById('game-canvas');
-        const ctx = canvas.getContext('2d');
-        const scoreElement = document.getElementById('score');
+        (function() {
+            const w = window;
+            const m = Math;
+            const rA = w['req' + 'uest' + 'Anim' + 'ation' + 'Frame'];
+            const cA = w['can' + 'cel' + 'Anim' + 'ation' + 'Frame'];
 
-        const COLS = 9;
-        const ROWS = 16;
-        let score = 0;
-        let grid = [];
-        
-        // 💡 튕겨 나가는 사과 파티클들을 관리하는 배열 추가
-        let particles = [];
-        let animationId = null;
+            const canvas = document.getElementById('game-canvas');
+            const ctx = canvas.getContext('2d');
+            const scoreElement = document.getElementById('score');
 
-        let isDragging = false;
-        let startX = 0, startY = 0;
-        let currentX = 0, currentY = 0;
+            const COLS = 9;
+            const ROWS = 16;
+            let score = 0;
+            let grid = [];
+            let particles = [];
+            let animationId = null;
 
-        const APPLE_SIZE_BASE = 40;
-        const PADDING_X = APPLE_SIZE_BASE * 0.5;
-        const PADDING_Y = APPLE_SIZE_BASE * 0.5;
+            let isDragging = false;
+            let startX = 0, startY = 0;
+            let currentX = 0, currentY = 0;
 
-        const CANVAS_WIDTH = (COLS * APPLE_SIZE_BASE) + (PADDING_X * 2);
-        const CANVAS_HEIGHT = (ROWS * APPLE_SIZE_BASE) + (PADDING_Y * 2); 
-        canvas.width = CANVAS_WIDTH;
-        canvas.height = CANVAS_HEIGHT;
+            const BASE_SIZE = 40;
+            const PAD_X = BASE_SIZE * 0.5;
+            const PAD_Y = BASE_SIZE * 0.5;
 
-        const CELL_W = APPLE_SIZE_BASE;
-        const CELL_H = APPLE_SIZE_BASE;
+            const CANVAS_WIDTH = (COLS * BASE_SIZE) + (PAD_X * 2);
+            const CANVAS_HEIGHT = (ROWS * BASE_SIZE) + (PAD_Y * 2); 
+            canvas.width = CANVAS_WIDTH;
+            canvas.height = CANVAS_HEIGHT;
 
-        const appleImg = new Image();
-        appleImg.src = 'apple.png';
-        
-        appleImg.onload = function() {
-            initGame();
-        };
+            const CELL_W = BASE_SIZE;
+            const CELL_H = BASE_SIZE;
 
-        if (appleImg.complete) {
-            setTimeout(() => { if(grid.length === 0) initGame(); }, 50);
-        }
+            const appleImg = new Image();
+            appleImg.src = 'apple.png';
+            
+            appleImg.onload = function() { initGame(); };
+            if (appleImg.complete) { setTimeout(() => { if(grid.length === 0) initGame(); }, 50); }
 
-        function initGame() {
-            grid = [];
-            particles = [];
-            for (let r = 0; r < ROWS; r++) {
-                grid[r] = [];
-                for (let c = 0; c < COLS; c++) {
-                    grid[r][c] = {
-                        number: Math.floor(Math.random() * 9) + 1,
-                        isCleared: false
-                    };
-                }
-            }
-            draw();
-        }
-
-        function getDragArea() {
-            return {
-                x1: Math.min(startX, currentX),
-                x2: Math.max(startX, currentX),
-                y1: Math.min(startY, currentY),
-                y2: Math.max(startY, currentY)
-            };
-        }
-
-        // 2. 화면 그리기 기능
-        function draw() {
-            ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-
-            const dragArea = isDragging ? getDragArea() : null;
-
-            // 정지된 기본 사과 및 숫자 그리기
-            for (let r = 0; r < ROWS; r++) {
-                for (let c = 0; c < COLS; c++) {
-                    const apple = grid[r][c];
-                    if (apple.isCleared) continue;
-
-                    const x = (c * CELL_W) + PADDING_X;
-                    const y = (r * CELL_H) + PADDING_Y;
-
-                    const appleX = x + CELL_W / 2;
-                    const appleY = y + CELL_H / 2;
-
-                    let isSelected = false;
-                    if (dragArea) {
-                        if (appleX >= dragArea.x1 && appleX <= dragArea.x2 && appleY >= dragArea.y1 && appleY <= dragArea.y2) {
-                            isSelected = true;
-                        }
+            function initGame() {
+                grid = []; particles = []; score = 0; scoreElement.innerText = "0";
+                for (let r = 0; r < ROWS; r++) {
+                    grid[r] = [];
+                    for (let c = 0; c < COLS; c++) {
+                        grid[r][c] = { number: m.floor(m.random() * 9) + 1, isCleared: false };
                     }
+                }
+                draw();
+            }
 
-                    const appleSize = CELL_W * 1.1; 
-                    const drawX = x - (appleSize - CELL_W) / 2;
-                    const drawY = y - (appleSize - CELL_H) / 2;
+            function getDragArea() {
+                return { x1: m.min(startX, currentX), x2: m.max(startX, currentX), y1: m.min(startY, currentY), y2: m.max(startY, currentY) };
+            }
 
-                    if (isSelected) {
-                        ctx.save();
-                        const thickness = 3;
-                        ctx.filter = "brightness(0) saturate(100%) invert(53%) sepia(93%) saturate(2644%) hue-rotate(174deg) brightness(104%) contrast(106%)"; 
-                        for (let dx = -thickness; dx <= thickness; dx += thickness) {
-                            for (let dy = -thickness; dy <= thickness; dy += thickness) {
-                                if (dx === 0 && dy === 0) continue;
-                                ctx.drawImage(appleImg, drawX + dx, drawY + dy, appleSize, appleSize);
+            function draw() {
+                ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+                const area = isDragging ? getDragArea() : null;
+
+                for (let r = 0; r < ROWS; r++) {
+                    for (let c = 0; c < COLS; c++) {
+                        const apple = grid[r][c];
+                        if (apple.isCleared) continue;
+
+                        const ax = (c * CELL_W) + PAD_X;
+                        const ay = (r * CELL_H) + PAD_Y;
+                        const cx = ax + CELL_W / 2;
+                        const cy = ay + CELL_H / 2;
+
+                        let isSel = false;
+                        if (area) { if (cx >= area.x1 && cx <= area.x2 && cy >= area.y1 && cy <= area.y2) isSel = true; }
+
+                        const size = CELL_W * 1.1; 
+                        const dx = ax - (size - CELL_W) / 2;
+                        const dy = ay - (size - CELL_H) / 2;
+
+                        if (isSel) {
+                            ctx.save();
+                            const th = 3;
+                            ctx.filter = "brightness(0) saturate(100%) invert(53%) sepia(93%) saturate(2644%) hue-rotate(174deg) brightness(104%) contrast(106%)"; 
+                            for (let mx = -th; mx <= th; mx += th) {
+                                for (let my = -th; my <= th; my += th) {
+                                    if (mx === 0 && my === 0) continue;
+                                    ctx.drawImage(appleImg, dx + mx, dy + my, size, size);
+                                }
                             }
+                            ctx.restore();
                         }
-                        ctx.restore();
-                    }
 
-                    ctx.drawImage(appleImg, drawX, drawY, appleSize, appleSize);
+                        ctx.drawImage(appleImg, dx, dy, size, size);
 
-                    // 숫자 텍스트
-                    ctx.fillStyle = '#ffffff';
-                    ctx.font = `bold ${CELL_W * 0.35}px sans-serif`;
-                    ctx.textAlign = 'center';
-                    ctx.textBaseline = 'middle';
-                    ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
-                    ctx.lineWidth = 2.5;
+                        ctx.fillStyle = '#ffffff';
+                        ctx.font = `bold ${CELL_W * 0.35}px sans-serif`;
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
+                        ctx.lineWidth = 2.5;
 
-                    const textY = y + CELL_H / 2 + (CELL_H * 0.1);
-                    ctx.strokeText(apple.number, x + CELL_W / 2, textY);
-                    ctx.fillText(apple.number, x + CELL_W / 2, textY);
-                }
-            }
-
-            // 💡 [새로 추가] 튕겨 나가는 파티클 사과 실시간 그리기
-            particles.forEach(p => {
-                ctx.save();
-                ctx.globalAlpha = p.alpha; // 서서히 투명해지게 처리
-                
-                // 사과 그리기
-                ctx.drawImage(appleImg, p.x - p.size/2, p.y - p.size/2, p.size, p.size);
-                
-                // 숫자 텍스트 그리기
-                ctx.fillStyle = '#ffffff';
-                ctx.font = `bold ${p.size * 0.32}px sans-serif`;
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
-                ctx.lineWidth = 2;
-                
-                ctx.strokeText(p.number, p.x, p.y + (p.size * 0.1));
-                ctx.fillText(p.number, p.x, p.y + (p.size * 0.1));
-                ctx.restore();
-            });
-
-            // 드래그 박스 표시
-            if (isDragging) {
-                ctx.strokeStyle = 'rgba(0, 150, 255, 0.35)';
-                ctx.lineWidth = 1.5;
-                ctx.fillStyle = 'rgba(0, 150, 255, 0.04)';
-                const width = currentX - startX;
-                const height = currentY - startY;
-                ctx.fillRect(startX, startY, width, height);
-                ctx.strokeRect(startX, startY, width, height);
-            }
-        }
-
-        // 💡 [새로 추가] 물리 효과 애니메이션 루프 업데이트
-        function updateParticles() {
-            let hasActiveParticles = false;
-
-            particles.forEach(p => {
-                p.x += p.vx; // 좌우 이동
-                p.y += p.vy; // 상하 이동
-                p.vy += p.gravity; // 중력 적용 (아래로 당겨짐)
-                p.alpha -= 0.02; // 회전하며 서서히 소멸 효과
-
-                if (p.alpha > 0) {
-                    hasActiveParticles = true;
-                }
-            });
-
-            // 투명도가 끝난 죽은 파티클은 배열에서 제거
-            particles = particles.filter(p => p.alpha > 0);
-
-            draw();
-
-            // 아직 화면에 튕겨 나가는 사과가 있다면 다음 프레임 요청 (60fps 무한 부드러움)
-            if (hasActiveParticles) {
-                animationId = requestAnimationFrame(updateParticles);
-            } else {
-                cancelAnimationFrame(animationId);
-                animationId = null;
-            }
-        }
-
-        function getCanvasCoords(e) {
-            const rect = canvas.getBoundingClientRect();
-            const clientX = e.touches ? e.touches[clientX] : e.clientX;
-            const clientY = e.touches ? e.touches.clientY : e.clientY;
-            return {
-                x: (clientX - rect.left) * (CANVAS_WIDTH / rect.width),
-                y: (clientY - rect.top) * (CANVAS_HEIGHT / rect.height)
-            };
-        }
-
-        function onStart(e) {
-            if (e.cancelable) e.preventDefault();
-            isDragging = true;
-            const coords = getCanvasCoords(e);
-            startX = currentX = coords.x;
-            startY = currentY = coords.y;
-            draw();
-        }
-
-        function onMove(e) {
-            if (!isDragging) return;
-            if (e.cancelable) e.preventDefault();
-            const coords = getCanvasCoords(e);
-            currentX = coords.x;
-            currentY = coords.y;
-            draw();
-        }
-
-        function onEnd(e) {
-            if (!isDragging) return;
-            isDragging = false;
-
-            const dragArea = getDragArea();
-            let sum = 0;
-            let selectedApples = [];
-
-            for (let r = 0; r < ROWS; r++) {
-                for (let c = 0; c < COLS; c++) {
-                    const apple = grid[r][c];
-                    if (apple.isCleared) continue;
-
-                    const appleX = (c * CELL_W) + PADDING_X + CELL_W / 2;
-                    const appleY = (r * CELL_H) + PADDING_Y + CELL_H / 2;
-
-                    if (appleX >= dragArea.x1 && appleX <= dragArea.x2 && appleY >= dragArea.y1 && appleY <= dragArea.y2) {
-                        sum += apple.number;
-                        // 보드 상의 좌표 정보도 함께 저장
-                        selectedApples.push({ apple, r, c });
+                        const textY = ay + CELL_H / 2 + (CELL_H * 0.1);
+                        ctx.strokeText(apple.number, ax + CELL_W / 2, textY);
+                        ctx.fillText(apple.number, ax + CELL_W / 2, textY);
                     }
                 }
+
+                particles.forEach(p => {
+                    ctx.save(); ctx.globalAlpha = p.alpha;
+                    ctx.drawImage(appleImg, p.x - p.size/2, p.y - p.size/2, p.size, p.size);
+                    ctx.fillStyle = '#ffffff'; ctx.font = `bold ${p.size * 0.32}px sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)'; ctx.lineWidth = 2;
+                    ctx.strokeText(p.number, p.x, p.y + (p.size * 0.1)); ctx.fillText(p.number, p.x, p.y + (p.size * 0.1));
+                    ctx.restore();
+                });
+
+                if (isDragging) {
+                    ctx.strokeStyle = 'rgba(0, 150, 255, 0.35)'; ctx.lineWidth = 1.5; ctx.fillStyle = 'rgba(0, 150, 255, 0.04)';
+                    ctx.fillRect(startX, startY, currentX - startX, currentY - startY); ctx.strokeRect(startX, startY, currentX - startX, currentY - startY);
+                }
             }
 
-            if (sum === 10 && selectedApples.length > 0) {
+            function updateParticles() {
+                let active = false;
+                particles.forEach(p => {
+                    p.x += p.vx; p.y += p.vy; p.vy += p.gravity; p.alpha -= 0.02;
+                    if (p.alpha > 0) active = true;
+                });
+                particles = particles.filter(p => p.alpha > 0);
+                draw();
+                if (active) { animationId = rA(updateParticles); } else { cA(animationId); animationId = null; }
+            }
+
+            function getCoords(e) {
+                const rect = canvas.getBoundingClientRect();
+                const touch = e.touches && e.touches.length > 0;
+                const clientX = touch ? e.touches[0].clientX : e.clientX;
+                const clientY = touch ? e.touches[0].clientY : e.clientY;
+                return { x: (clientX - rect.left) * (CANVAS_WIDTH / rect.width), y: (clientY - rect.top) * (CANVAS_HEIGHT / rect.height) };
+            }
+
+            function onStart(e) { if (e.cancelable) e.preventDefault(); isDragging = true; const coords = getCoords(e); startX = currentX = coords.x; startY = currentY = coords.y; draw(); }
+            function onMove(e) { if (!isDragging) return; if (e.cancelable) e.preventDefault(); const coords = getCoords(e); currentX = coords.x; currentY = coords.y; draw(); }
+            
+            function onEnd(e) {
+                if (!isDragging) return; isDragging = false;
+                const area = getDragArea(); let sum = 0; let selected = [];
+                for (let r = 0; r < ROWS; r++) {
+                    for (let c = 0; c < COLS; c++) {
+                        const apple = grid[r][c]; if (apple.isCleared) continue;
+                        const appleX = (c * CELL_W) + PAD_X + CELL_W / 2; const appleY = (r * CELL_H) + PAD_Y + CELL_H / 2;
+                        if (appleX >= area.x1 && appleX <= area.x2 && appleY >= area.y1 && appleY <= area.y2) { sum += apple.number; selected.push({ apple, r, c }); }
+                    }
+                }
+                if (sum === 10 && selected.length > 0) {
+                    selected.forEach(item => {
+                        item.apple.isCleared = true;
+                        particles.push({
+                            x: (item.c * CELL_W) + PAD_X + CELL_W / 2, y: (item.r * CELL_H) + PAD_Y + CELL_H / 2,
+                            number: item.apple.number, size: CELL_W * 1.1, vx: (m.random() - 0.5) * 8, vy: -m.random() * 6 - 4, gravity: 0.4, alpha: 1.0
+                        });
+                    });
+                    score += selected.length; scoreElement.innerText = score;
+                    if (!animationId) { animationId = rA(updateParticles); }
+                }
+                draw();
+            }
+
+            canvas.addEventListener('mousedown', onStart); canvas.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onEnd);
+            canvas.addEventListener('touchstart', onStart, { passive: false }); canvas.addEventListener('touchmove', onMove, { passive: false }); window.addEventListener('touchend', onEnd);
+        })();
+    </script>
+</body>
+</html>

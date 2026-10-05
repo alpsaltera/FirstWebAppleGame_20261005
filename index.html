@@ -1,5 +1,3 @@
-
-
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -26,14 +24,29 @@
         #score-board {
             font-size: 24px;
             font-weight: bold;
-            margin-bottom: 10px;
+            margin-bottom: 5px;
             color: #333;
+        }
+        #timer-container {
+            width: 100%;
+            max-width: 450px;
+            height: 12px;
+            background-color: #ddd;
+            border-radius: 6px;
+            margin-bottom: 10px;
+            overflow: hidden;
+            box-shadow: inset 0 1px 3px rgba(0,0,0,0.2);
+        }
+        #timer-bar {
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(to right, #4caf50, #8bc34a);
+            transition: width 0.1s linear, background-color 0.5s ease;
         }
         #game-container {
             position: relative;
             width: 100%;
             max-width: 450px;
-            /* 💡 [수정] 가로 9열, 세로 16행 + 상하좌우 반 칸 여백 비율에 맞춰 종횡비 조정 (10 / 17) */
             aspect-ratio: 10 / 17;
             background-color: #fff;
             box-shadow: 0 4px 10px rgba(0,0,0,0.1);
@@ -45,41 +58,93 @@
             height: 100%;
             display: block;
         }
+        #game-over-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.75);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            z-index: 10;
+        }
+        #game-over-screen h2 {
+            font-size: 36px;
+            margin: 0 0 10px 0;
+            color: #ff5252;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+        }
+        #game-over-screen p {
+            font-size: 20px;
+            margin: 0 0 25px 0;
+        }
+        #restart-btn {
+            padding: 12px 28px;
+            font-size: 18px;
+            font-weight: bold;
+            color: white;
+            background-color: #ff5252;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            transition: transform 0.1s;
+        }
+        #restart-btn:active {
+            transform: scale(0.95);
+        }
     </style>
 </head>
 <body>
 
     <div id="score-board">SCORE: <span id="score">0</span></div>
+    
+    <div id="timer-container">
+        <div id="timer-bar"></div>
+    </div>
+
     <div id="game-container">
         <canvas id="game-canvas"></canvas>
+        
+        <div id="game-over-screen">
+            <h2>GAME OVER</h2>
+            <p>최종 점수: <span id="final-score">0</span>점</p>
+            <button id="restart-btn">다시 도전하기 🔄</button>
+        </div>
     </div>
 
     <script>
         const canvas = document.getElementById('game-canvas');
         const ctx = canvas.getContext('2d');
         const scoreElement = document.getElementById('score');
+        const timerBar = document.getElementById('timer-bar');
+        const gameOverScreen = document.getElementById('game-over-screen');
+        const finalScoreElement = document.getElementById('final-score');
+        const restartBtn = document.getElementById('restart-btn');
 
-        // 💡 [수정] 요청하신 가로 9열, 세로 16행 세팅 완료!
         const COLS = 9;
         const ROWS = 16;
         let score = 0;
         let grid = [];
 
-        // 드래그 상태 관리
+        const GAME_DURATION = 120; 
+        let timeLeft = GAME_DURATION;
+        let timerId = null;
+        let isGameOver = false;
+        let isImageLoaded = false; // 💡 이미지 로드 여부를 확인하는 방어형 변수 추가
+
         let isDragging = false;
         let startX = 0, startY = 0;
         let currentX = 0, currentY = 0;
 
-        // 사과 1칸의 고정 크기 (해상도가 넓어져 사과가 더 크게 보입니다)
         const APPLE_SIZE_BASE = 40;
+        const PADDING_X = APPLE_SIZE_BASE * 0.5;
+        const PADDING_Y = APPLE_SIZE_BASE * 0.5;
 
-        // 상하좌우 반 칸(20px) 여백 공간 변수 설정
-        const PADDING_X = APPLE_SIZE_BASE * 0.5; // 좌우 각각 20px
-        const PADDING_Y = APPLE_SIZE_BASE * 0.5; // 상하 각각 20px
-
-        // 💡 [수정] 9열 16행 기준에 맞춰 전체 내부 해상도 재계산
-        // 가로: (9칸 * 40px) + 좌우여백 40px = 400px
-        // 세로: (16칸 * 40px) + 상하여백 40px = 680px
         const CANVAS_WIDTH = (COLS * APPLE_SIZE_BASE) + (PADDING_X * 2);
         const CANVAS_HEIGHT = (ROWS * APPLE_SIZE_BASE) + (PADDING_Y * 2); 
         canvas.width = CANVAS_WIDTH;
@@ -88,16 +153,34 @@
         const CELL_W = APPLE_SIZE_BASE;
         const CELL_H = APPLE_SIZE_BASE;
 
-        // 사과 이미지 객체 생성 및 로드
         const appleImg = new Image();
         appleImg.src = 'apple.png';
         
+        // 💡 [수정] 이미지가 '확실히' 로드된 시점에만 플래그를 세우고 첫 게임을 가동합니다.
         appleImg.onload = function() {
+            isImageLoaded = true;
             initGame();
         };
 
-        // 1. 사과 데이터 초기화
+        // 혹시 이미지가 캐싱되어 onload가 안 튈 때를 대비한 2중 안전 장치
+        if (appleImg.complete) {
+            isImageLoaded = true;
+            // 최초 한 번만 호출되도록 시간차를 둡니다.
+            setTimeout(() => { if(!timerId) initGame(); }, 100);
+        }
+
+        // 1. 게임 시작/초기화 기능
         function initGame() {
+            if (!isImageLoaded) return; // 💡 이미지가 없으면 타이머 가동을 원천 차단합니다.
+
+            score = 0;
+            timeLeft = GAME_DURATION;
+            isGameOver = false;
+            scoreElement.innerText = "0";
+            timerBar.style.width = "100%";
+            timerBar.style.backgroundColor = "#4caf50";
+            gameOverScreen.style.display = "none";
+
             grid = [];
             for (let r = 0; r < ROWS; r++) {
                 grid[r] = [];
@@ -108,14 +191,58 @@
                     };
                 }
             }
+
+            if (timerId) clearInterval(timerId);
+            timerId = setInterval(updateTimer, 100); 
+
             draw();
+        }
+
+        function updateTimer() {
+            if (isGameOver) return;
+
+            timeLeft -= 0.1;
+            const percentage = (timeLeft / GAME_DURATION) * 100;
+            
+            timerBar.style.width = percentage + "%";
+
+            if (percentage <= 25) {
+                timerBar.style.backgroundColor = "#ff5252";
+            } else if (percentage <= 50) {
+                timerBar.style.backgroundColor = "#ffc107";
+            }
+
+            if (timeLeft <= 0) {
+                endGame();
+            }
+        }
+
+        function endGame() {
+            isGameOver = true;
+            clearInterval(timerId);
+            isDragging = false;
+
+            finalScoreElement.innerText = score;
+            gameOverScreen.style.display = "flex";
+            draw();
+        }
+
+        function getDragArea() {
+            return {
+                x1: Math.min(startX, currentX),
+                x2: Math.max(startX, currentX),
+                y1: Math.min(startY, currentY),
+                y2: Math.max(startY, currentY)
+            };
         }
 
         // 2. 화면 그리기 기능
         function draw() {
             ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+            if (!isImageLoaded) return; // 이미지 미로드시 드로우 방지
 
-            // 사과 및 숫자 그리기
+            const dragArea = isDragging ? getDragArea() : null;
+
             for (let r = 0; r < ROWS; r++) {
                 for (let c = 0; c < COLS; c++) {
                     const apple = grid[r][c];
@@ -124,19 +251,46 @@
                     const x = (c * CELL_W) + PADDING_X;
                     const y = (r * CELL_H) + PADDING_Y;
 
-                    // 사과를 화사하고 밝게 연출하는 필터 적용
-                    ctx.filter = "brightness(1.15) contrast(1.1)";
+                    const appleX = x + CELL_W / 2;
+                    const appleY = y + CELL_H / 2;
+
+                    let isSelected = false;
+                    if (dragArea) {
+                        if (appleX >= dragArea.x1 && appleX <= dragArea.x2 && appleY >= dragArea.y1 && appleY <= dragArea.y2) {
+                            isSelected = true;
+                        }
+                    }
 
                     const appleSize = CELL_W * 1.1; 
                     const offsetX = (appleSize - CELL_W) / 2;
                     const offsetY = (appleSize - CELL_H) / 2;
+                    const drawX = x - offsetX;
+                    const drawY = y - offsetY;
 
-                    ctx.drawImage(appleImg, x - offsetX, y - offsetY, appleSize, appleSize);
+                    if (isSelected) {
+                        ctx.save();
+                        const thickness = 3;
+                        ctx.filter = "brightness(0) saturate(100%) invert(53%) sepia(93%) saturate(2644%) hue-rotate(174deg) brightness(104%) contrast(106%)"; 
+                        
+                        for (let dx = -thickness; dx <= thickness; dx += thickness) {
+                            for (let dy = -thickness; dy <= thickness; dy += thickness) {
+                                if (dx === 0 && dy === 0) continue;
+                                ctx.drawImage(appleImg, drawX + dx, drawY + dy, appleSize, appleSize);
+                            }
+                        }
+                        ctx.restore();
+                    }
 
-                    // 숫자를 그릴 때는 필터 해제
-                    ctx.filter = "none";
+                    ctx.save();
+                    if (isSelected) {
+                        ctx.filter = "brightness(1.2) contrast(1.1)"; 
+                    } else {
+                        ctx.filter = "brightness(1.15) contrast(1.1)"; 
+                    }
 
-                    // 숫자 텍스트 설정
+                    ctx.drawImage(appleImg, drawX, drawY, appleSize, appleSize);
+                    ctx.restore();
+
                     ctx.fillStyle = '#ffffff';
                     ctx.font = `bold ${CELL_W * 0.35}px sans-serif`;
                     ctx.textAlign = 'center';
@@ -145,104 +299,5 @@
                     ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
                     ctx.lineWidth = 2.5;
 
-                    // 정중앙 정렬 유지
                     const textY = y + CELL_H / 2 + (CELL_H * 0.1);
                     
-                    ctx.strokeText(apple.number, x + CELL_W / 2, textY);
-                    ctx.fillText(apple.number, x + CELL_W / 2, textY);
-                }
-            }
-
-            // 드래그 중일 때 선택 영역 박스 표시
-            if (isDragging) {
-                ctx.strokeStyle = 'rgba(0, 150, 255, 0.8)';
-                ctx.lineWidth = 3;
-                ctx.fillStyle = 'rgba(0, 150, 255, 0.2)';
-                
-                const width = currentX - startX;
-                const height = currentY - startY;
-                
-                ctx.fillRect(startX, startY, width, height);
-                ctx.strokeRect(startX, startY, width, height);
-            }
-        }
-
-        // 3. 좌표 변환 함수
-        function getCanvasCoords(e) {
-            const rect = canvas.getBoundingClientRect();
-            const clientX = e.touches ? e.touches.clientX : e.clientX;
-            const clientY = e.touches ? e.touches.clientY : e.clientY;
-
-            return {
-                x: (clientX - rect.left) * (CANVAS_WIDTH / rect.width),
-                y: (clientY - rect.top) * (CANVAS_HEIGHT / rect.height)
-            };
-        }
-
-        // 4. 드래그 시작 이벤트
-        function onStart(e) {
-            if (e.cancelable) e.preventDefault();
-            isDragging = true;
-            const coords = getCanvasCoords(e);
-            startX = currentX = coords.x;
-            startY = currentY = coords.y;
-            draw();
-        }
-
-        // 5. 드래그 중 이벤트
-        function onMove(e) {
-            if (!isDragging) return;
-            if (e.cancelable) e.preventDefault();
-            const coords = getCanvasCoords(e);
-            currentX = coords.x;
-            currentY = coords.y;
-            draw();
-        }
-
-        // 6. 드래그 종료 및 조건 검증
-        function onEnd(e) {
-            if (!isDragging) return;
-            isDragging = false;
-
-            const x1 = Math.min(startX, currentX);
-            const x2 = Math.max(startX, currentX);
-            const y1 = Math.min(startY, currentY);
-            const y2 = Math.max(startY, currentY);
-
-            let sum = 0;
-            let selectedApples = [];
-
-            for (let r = 0; r < ROWS; r++) {
-                for (let c = 0; c < COLS; c++) {
-                    const apple = grid[r][c];
-                    if (apple.isCleared) continue;
-
-                    const appleX = (c * CELL_W) + PADDING_X + CELL_W / 2;
-                    const appleY = (r * CELL_H) + PADDING_Y + CELL_H / 2;
-
-                    if (appleX >= x1 && appleX <= x2 && appleY >= y1 && appleY <= y2) {
-                        sum += apple.number;
-                        selectedApples.push(apple);
-                    }
-                }
-            }
-
-            if (sum === 10 && selectedApples.length > 0) {
-                selectedApples.forEach(apple => apple.isCleared = true);
-                score += selectedApples.length;
-                scoreElement.innerText = score;
-            }
-
-            draw();
-        }
-
-        canvas.addEventListener('mousedown', onStart);
-        canvas.addEventListener('mousemove', onMove);
-        window.addEventListener('mouseup', onEnd);
-
-        canvas.addEventListener('touchstart', onStart, { passive: false });
-        canvas.addEventListener('touchmove', onMove, { passive: false });
-        window.addEventListener('touchend', onEnd);
-    </script>
-</body>
-</html>

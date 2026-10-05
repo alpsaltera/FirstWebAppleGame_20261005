@@ -31,8 +31,8 @@
             position: relative;
             width: 100%;
             max-width: 450px;
-            /* 💡 [수정] 상하좌우에 반 칸(0.5칸)씩 여백이 생겨 가로 13칸, 세로 18칸 비율로 프레임 조정 */
-            aspect-ratio: 13 / 18;
+            /* 💡 [수정] 가로 9열, 세로 16행 + 상하좌우 반 칸 여백 비율에 맞춰 종횡비 조정 (10 / 17) */
+            aspect-ratio: 10 / 17;
             background-color: #fff;
             box-shadow: 0 4px 10px rgba(0,0,0,0.1);
             overflow: hidden;
@@ -57,9 +57,9 @@
         const ctx = canvas.getContext('2d');
         const scoreElement = document.getElementById('score');
 
-        // 오리지널 사과게임 비율과 크기 (12행 17열)
-        const COLS = 12;
-        const ROWS = 17;
+        // 💡 [수정] 요청하신 가로 9열, 세로 16행 세팅 완료!
+        const COLS = 9;
+        const ROWS = 16;
         let score = 0;
         let grid = [];
 
@@ -68,16 +68,16 @@
         let startX = 0, startY = 0;
         let currentX = 0, currentY = 0;
 
-        // 사과 1칸의 고정 크기
+        // 사과 1칸의 고정 크기 (해상도가 넓어져 사과가 더 크게 보입니다)
         const APPLE_SIZE_BASE = 40;
 
-        // 💡 [수정] 상하좌우 반 칸(20px) 여백 공간 변수 설정
+        // 상하좌우 반 칸(20px) 여백 공간 변수 설정
         const PADDING_X = APPLE_SIZE_BASE * 0.5; // 좌우 각각 20px
         const PADDING_Y = APPLE_SIZE_BASE * 0.5; // 상하 각각 20px
 
-        // 💡 [수정] 여백이 추가된 전체 내부 해상도 계산
-        // 가로: (12칸 * 40px) + 좌우여백 40px = 520px
-        // 세로: (17칸 * 40px) + 상하여백 40px = 720px
+        // 💡 [수정] 9열 16행 기준에 맞춰 전체 내부 해상도 재계산
+        // 가로: (9칸 * 40px) + 좌우여백 40px = 400px
+        // 세로: (16칸 * 40px) + 상하여백 40px = 680px
         const CANVAS_WIDTH = (COLS * APPLE_SIZE_BASE) + (PADDING_X * 2);
         const CANVAS_HEIGHT = (ROWS * APPLE_SIZE_BASE) + (PADDING_Y * 2); 
         canvas.width = CANVAS_WIDTH;
@@ -119,7 +119,6 @@
                     const apple = grid[r][c];
                     if (apple.isCleared) continue;
 
-                    // 💡 [수정] 기존 좌표에 여백(PADDING) 값을 더해 사과들이 안쪽으로 모이게 만듭니다.
                     const x = (c * CELL_W) + PADDING_X;
                     const y = (r * CELL_H) + PADDING_Y;
 
@@ -137,14 +136,15 @@
 
                     // 숫자 텍스트 설정
                     ctx.fillStyle = '#ffffff';
-                    ctx.font = `bold ${CELL_W * 0.38}px sans-serif`;
+                    ctx.font = `bold ${CELL_W * 0.35}px sans-serif`;
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'middle';
                     
                     ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
                     ctx.lineWidth = 2.5;
 
-                    const textY = y + CELL_H / 2 + (CELL_H * 0.03);
+                    // 정중앙 정렬 유지
+                    const textY = y + CELL_H / 2 + (CELL_H * 0.1);
                     
                     ctx.strokeText(apple.number, x + CELL_W / 2, textY);
                     ctx.fillText(apple.number, x + CELL_W / 2, textY);
@@ -215,7 +215,6 @@
                     const apple = grid[r][c];
                     if (apple.isCleared) continue;
 
-                    // 💡 [수정] 마우스/터치 판정 계산 시에도 여백(PADDING) 위치 값을 포함하도록 보정합니다.
                     const appleX = (c * CELL_W) + PADDING_X + CELL_W / 2;
                     const appleY = (r * CELL_H) + PADDING_Y + CELL_H / 2;
 

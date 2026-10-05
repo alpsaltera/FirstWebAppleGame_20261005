@@ -24,23 +24,8 @@
         #score-board {
             font-size: 24px;
             font-weight: bold;
-            margin-bottom: 5px;
-            color: #333;
-        }
-        #timer-container {
-            width: 100%;
-            max-width: 450px;
-            height: 12px;
-            background-color: #ddd;
-            border-radius: 6px;
             margin-bottom: 10px;
-            overflow: hidden;
-            box-shadow: inset 0 1px 3px rgba(0,0,0,0.2);
-        }
-        #timer-bar {
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(to right, #4caf50, #8bc34a);
+            color: #333;
         }
         #game-container {
             position: relative;
@@ -57,93 +42,39 @@
             height: 100%;
             display: block;
         }
-        #game-over-screen {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.85);
-            display: none;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            z-index: 10;
-        }
-        #game-over-screen h2 {
-            font-size: 36px;
-            margin: 0 0 10px 0;
-            color: #ff5252;
-            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
-        }
-        #game-over-screen p {
-            font-size: 20px;
-            margin: 0 0 25px 0;
-        }
-        #restart-btn {
-            padding: 12px 28px;
-            font-size: 18px;
-            font-weight: bold;
-            color: white;
-            background-color: #ff5252;
-            border: none;
-            border-radius: 25px;
-            cursor: pointer;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-            transition: transform 0.1s;
-        }
-        #restart-btn:active {
-            transform: scale(0.95);
-        }
     </style>
 </head>
 <body>
 
     <div id="score-board">SCORE: <span id="score">0</span></div>
-    
-    <div id="timer-container">
-        <div id="timer-bar"></div>
-    </div>
-
     <div id="game-container">
         <canvas id="game-canvas"></canvas>
-        
-        <div id="game-over-screen">
-            <h2>GAME OVER</h2>
-            <p>최종 점수: <span id="final-score">0</span>점</p>
-            <button id="restart-btn">다시 도전하기 🔄</button>
-        </div>
     </div>
 
     <script>
         const canvas = document.getElementById('game-canvas');
         const ctx = canvas.getContext('2d');
         const scoreElement = document.getElementById('score');
-        const timerBar = document.getElementById('timer-bar');
-        const gameOverScreen = document.getElementById('game-over-screen');
-        const finalScoreElement = document.getElementById('final-score');
-        const restartBtn = document.getElementById('restart-btn');
 
+        // 가로 9열, 세로 16행 구조 유지
         const COLS = 9;
         const ROWS = 16;
         let score = 0;
         let grid = [];
 
-        const GAME_DURATION = 120; // 120초
-        let timeLeft = GAME_DURATION;
-        let timerId = null;
-        let isGameOver = false;
-        let isImageLoaded = false;
-
+        // 드래그 상태 관리
         let isDragging = false;
         let startX = 0, startY = 0;
         let currentX = 0, currentY = 0;
 
+        // 사과 1칸의 고정 크기
         const APPLE_SIZE_BASE = 40;
+
+        // 상하좌우 반 칸(20px) 여백 공간 변수 설정
         const PADDING_X = APPLE_SIZE_BASE * 0.5;
         const PADDING_Y = APPLE_SIZE_BASE * 0.5;
 
+        // 해상도 계산
         const CANVAS_WIDTH = (COLS * APPLE_SIZE_BASE) + (PADDING_X * 2);
         const CANVAS_HEIGHT = (ROWS * APPLE_SIZE_BASE) + (PADDING_Y * 2); 
         canvas.width = CANVAS_WIDTH;
@@ -152,31 +83,21 @@
         const CELL_W = APPLE_SIZE_BASE;
         const CELL_H = APPLE_SIZE_BASE;
 
-        // 사과 이미지 설정
+        // 사과 이미지 객체 생성 및 로드
         const appleImg = new Image();
         appleImg.src = 'apple.png';
         
         appleImg.onload = function() {
-            isImageLoaded = true;
             initGame();
         };
 
+        // 이미지 캐싱 예외처리 방어 로직
         if (appleImg.complete) {
-            isImageLoaded = true;
-            setTimeout(() => { if(!timerId) initGame(); }, 100);
+            setTimeout(() => { if(grid.length === 0) initGame(); }, 50);
         }
 
-        // 1. 게임 초기화 및 시작
+        // 1. 사과 데이터 초기화
         function initGame() {
-            score = 0;
-            timeLeft = GAME_DURATION;
-            isGameOver = false;
-            isDragging = false;
-            scoreElement.innerText = "0";
-            timerBar.style.width = "100%";
-            timerBar.style.backgroundColor = "#4caf50";
-            gameOverScreen.style.display = "none";
-
             grid = [];
             for (let r = 0; r < ROWS; r++) {
                 grid[r] = [];
@@ -187,43 +108,10 @@
                     };
                 }
             }
-
-            if (timerId) clearInterval(timerId);
-            timerId = setInterval(updateTimer, 1000); 
-
             draw();
         }
 
-        // ⏱️ 타이머 관리
-        function updateTimer() {
-            if (isGameOver) return;
-
-            timeLeft -= 1;
-            const percentage = (timeLeft / GAME_DURATION) * 100;
-            
-            timerBar.style.width = percentage + "%";
-
-            if (percentage <= 25) {
-                timerBar.style.backgroundColor = "#ff5252";
-            } else if (percentage <= 50) {
-                timerBar.style.backgroundColor = "#ffc107";
-            }
-
-            if (timeLeft <= 0) {
-                endGame();
-            }
-        }
-
-        function endGame() {
-            isGameOver = true;
-            clearInterval(timerId);
-            isDragging = false;
-
-            finalScoreElement.innerText = score;
-            gameOverScreen.style.display = "flex";
-            draw();
-        }
-
+        // 드래그 영역 계산 함수
         function getDragArea() {
             return {
                 x1: Math.min(startX, currentX),
@@ -239,6 +127,7 @@
 
             const dragArea = isDragging ? getDragArea() : null;
 
+            // 사과 및 숫자 그리기
             for (let r = 0; r < ROWS; r++) {
                 for (let c = 0; c < COLS; c++) {
                     const apple = grid[r][c];
@@ -250,6 +139,7 @@
                     const appleX = x + CELL_W / 2;
                     const appleY = y + CELL_H / 2;
 
+                    // 현재 사과가 드래그 영역 안에 있는지 체크
                     let isSelected = false;
                     if (dragArea) {
                         if (appleX >= dragArea.x1 && appleX <= dragArea.x2 && appleY >= dragArea.y1 && appleY <= dragArea.y2) {
@@ -263,20 +153,25 @@
                     const drawX = x - offsetX;
                     const drawY = y - offsetY;
 
-                    // 선택 외곽 후광 이펙트
+                    // 💡 유저님이 요청하신 '3px 두께의 선명한 이미지 스프라이트 외곽선' 구현
                     if (isSelected) {
                         ctx.save();
-                        ctx.beginPath();
-                        ctx.arc(appleX, appleY, appleSize / 2 + 1, 0, Math.PI * 2);
-                        ctx.fillStyle = "rgba(0, 176, 255, 0.7)";
-                        ctx.fill();
+                        const thickness = 3;
+                        // 선명한 파란색 단색 라인을 따주는 컬러 필터 매핑
+                        ctx.filter = "brightness(0) saturate(100%) invert(53%) sepia(93%) saturate(2644%) hue-rotate(174deg) brightness(104%) contrast(106%)"; 
+                        
+                        // 3px 외곽선의 촘촘한 정밀도를 위해 8방향 겹쳐 그리기 처리
+                        for (let dx = -thickness; dx <= thickness; dx += thickness) {
+                            for (let dy = -thickness; dy <= thickness; dy += thickness) {
+                                if (dx === 0 && dy === 0) continue;
+                                ctx.drawImage(appleImg, drawX + dx, drawY + dy, appleSize, appleSize);
+                            }
+                        }
                         ctx.restore();
                     }
 
-                    // 사과 이미지 그리기 (안전 제일 순정 드로우)
-                    if (isImageLoaded) {
-                        ctx.drawImage(appleImg, drawX, drawY, appleSize, appleSize);
-                    }
+                    // 원본 사과 이미지 출력 (브라우저 충돌을 피하기 위해 필터를 완전히 제거했습니다)
+                    ctx.drawImage(appleImg, drawX, drawY, appleSize, appleSize);
 
                     // 숫자 텍스트 설정
                     ctx.fillStyle = '#ffffff';
@@ -287,6 +182,7 @@
                     ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
                     ctx.lineWidth = 2.5;
 
+                    // 정중앙 10% 하단 최적화 정렬 위치 유지
                     const textY = y + CELL_H / 2 + (CELL_H * 0.1);
                     
                     ctx.strokeText(apple.number, x + CELL_W / 2, textY);
@@ -294,6 +190,7 @@
                 }
             }
 
+            // 드래그 중일 때 선택 영역 박스 표시
             if (isDragging) {
                 ctx.strokeStyle = 'rgba(0, 150, 255, 0.35)';
                 ctx.lineWidth = 1.5;
@@ -307,8 +204,78 @@
             }
         }
 
-        // 💡 [수정 완료] 자바스크립트 에러를 유발하던 모바일 터치 인덱스 구문을 [0] 번으로 정밀 정정
-        function getCoords(e) {
+        // 3. 좌표 변환 함수 (기존 초기 안정형 마우스/터치 호환 코드로 롤백)
+        function getCanvasCoords(e) {
             const rect = canvas.getBoundingClientRect();
-            let clientX, clientY;
-            
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+            return {
+                x: (clientX - rect.left) * (CANVAS_WIDTH / rect.width),
+                y: (clientY - rect.top) * (CANVAS_HEIGHT / rect.height)
+            };
+        }
+
+        // 4. 드래그 시작 이벤트
+        function onStart(e) {
+            if (e.cancelable) e.preventDefault();
+            isDragging = true;
+            const coords = getCanvasCoords(e);
+            startX = currentX = coords.x;
+            startY = currentY = coords.y;
+            draw();
+        }
+
+        // 5. 드래그 중 이벤트
+        function onMove(e) {
+            if (!isDragging) return;
+            if (e.cancelable) e.preventDefault();
+            const coords = getCanvasCoords(e);
+            currentX = coords.x;
+            currentY = coords.y;
+            draw();
+        }
+
+        // 6. 드래그 종료 및 조건 검증
+        function onEnd(e) {
+            if (!isDragging) return;
+            isDragging = false;
+
+            const dragArea = getDragArea();
+            let sum = 0;
+            let selectedApples = [];
+
+            for (let r = 0; r < ROWS; r++) {
+                for (let c = 0; c < COLS; c++) {
+                    const apple = grid[r][c];
+                    if (apple.isCleared) continue;
+
+                    const appleX = (c * CELL_W) + PADDING_X + CELL_W / 2;
+                    const appleY = (r * CELL_H) + PADDING_Y + CELL_H / 2;
+
+                    if (appleX >= dragArea.x1 && appleX <= dragArea.x2 && appleY >= dragArea.y1 && appleY <= dragArea.y2) {
+                        sum += apple.number;
+                        selectedApples.push(apple);
+                    }
+                }
+            }
+
+            if (sum === 10 && selectedApples.length > 0) {
+                selectedApples.forEach(apple => apple.isCleared = true);
+                score += selectedApples.length;
+                scoreElement.innerText = score;
+            }
+
+            draw();
+        }
+
+        canvas.addEventListener('mousedown', onStart);
+        canvas.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onEnd);
+
+        canvas.addEventListener('touchstart', onStart, { passive: false });
+        canvas.addEventListener('touchmove', onMove, { passive: false });
+        window.addEventListener('touchend', onEnd);
+    </script>
+</body>
+</html>

@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>HTML5 모바일 사과게임</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #f0f0f0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-family: sans-serif;
+            height: 100vh;
+        }
+        #score-board {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #333;
+        }
+        /* 10:17 비율을 유지하는 게임 반응형 컨테이너 */
+        #game-container {
+            position: relative;
+            width: 100%;
+            max-width: 450px; /* 모바일 최대 크기 제한 */
+            aspect-ratio: 10 / 17;
+            background-color: #fff;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+            touch-action: none; /* 브라우저 기본 스크롤 및 제스처 방지 */
+        }
+        #game-canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="score-board">SCORE: <span id="score">0</span></div>
+    <div id="game-container">
+        <canvas id="game-canvas"></canvas>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('game-canvas');
+        const ctx = canvas.getContext('2d');
+        const scoreElement = document.getElementById('score');
+
+        // 게임 설정 (10행 17열)
+        const COLS = 10;
+        const ROWS = 17;
+        let score = 0;
+        let grid = [];
+
+        // 드래그 상태 관리
+        let isDragging = false;
+        let startX = 0, startY = 0;
+        let currentX = 0, currentY = 0;
+
+        // 캔버스 내부 해상도 설정 (고해상도 대응)
+        const CANVAS_WIDTH = 400;
+        const CANVAS_HEIGHT = 680;
+        canvas.width = CANVAS_WIDTH;
+        canvas.height = CANVAS_HEIGHT;
+
+        const CELL_W = CANVAS_WIDTH / COLS;
+        const CELL_H = CANVAS_HEIGHT / ROWS;
+
+        // 1. 사과 데이터 초기화 (1~9 무작위 배열)
+        function initGame() {
+            grid = [];
+            for (let r = 0; r < ROWS; r++) {
+                grid[r] = [];
+                for (let c = 0; c < COLS; c++) {
+                    grid[r][c] = {
+                        number: Math.floor(Math.random() * 9) + 1,
+                        isCleared: false
+                    };
+                }
+            }
+            draw();
+        }
+
+        // 2. 화면 그리기 기능
+        function draw() {
+            ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+            // 사과 및 숫자 그리기
+            for (let r = 0; r < ROWS; r++) {
+                for (let c = 0; c < COLS; c++) {
+                    const apple = grid[r][c];
+                    if (apple.isCleared) continue;
+
+                    const x = c * CELL_W;
+                    const y = r * CELL_H;
+
+                    // 사과 배경 원 (나중에 사과 이미지로 대체 가능)
+                    ctx.beginPath();
+                    ctx.arc(x + CELL_W/2, y + CELL_H/2, CELL_W*0.4, 0, Math.PI * 2);
+                    ctx.fillStyle = '#ff5252';
+                    ctx.fill();
+
+                    // 숫자 텍스트
+                    ctx.fillStyle = '#ffffff';
+                    ctx.font = `bold ${CELL_W * 0.5}px sans-serif`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(apple.number, x + CELL_W/2, y + CELL_H/2 + 1);
+                }
+            }
+
+            // 드래그 중일 때 선택 영역 박스 표시
+            if (isDragging) {
+                ctx.strokeStyle = 'rgba(0, 150, 255, 0.8)';
+                ctx.lineWidth = 3;
+                ctx.fillStyle = 'rgba(0, 150, 255, 0.2)';
+                
+                const width = currentX - startX;
+                const height = currentY - startY;
+                
+                ctx.fillRect(startX, startY, width, height);
+                ctx.strokeRect(startX, startY, width, height);
+            }
+        }
+
+        // 3. 좌표 변환 함수 (모바일 화면 좌표 -> 게임 내부 Canvas 좌표)
+        function getCanvasCoords(e) {
+            const rect = canvas.getBoundingClientRect();
+            // 마우스 이벤트와 터치 이벤트 분기 처리
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+            // 브라우저에 표시되는 실제 크기와 내부 해상도(400x680) 비율 계산
+            return {
+                x: (clientX - rect.left) * (CANVAS_WIDTH / rect.width),
+                y: (clientY - rect.top) * (CANVAS_HEIGHT / rect.height)
+            };
+        }
+
+        // 4. 드래그 시작 이벤트
+        function onStart(e) {
+            if (e.cancelable) e.preventDefault(); // 스크롤 방지
+            isDragging = true;
+            const coords = getCanvasCoords(e);
+            startX = currentX = coords.x;
+            startY = currentY = coords.y;
+            draw();
+        }
+
+        // 5. 드래그 중 이벤트
+        function onMove(e) {
+            if (!isDragging) return;
+            if (e.cancelable) e.preventDefault();
+            const coords = getCanvasCoords(e);
+            currentX = coords.x;
+            currentY = coords.y;
+            draw();
+        }
+
+        // 6. 드래그 종료 및 조건 검증 (합이 10인지 확인)
+        function onEnd(e) {
+            if (!isDragging) return;
+            isDragging = false;
+
+            // 선택된 사각형 영역 계산
+            const x1 = Math.min(startX, currentX);
+            const x2 = Math.max(startX, currentX);
+            const y1 = Math.min(startY, currentY);
+            const y2 = Math.max(startY, currentY);
+
+            let sum = 0;
+            let selectedApples = [];
+
+            // 영역 안에 포함된 사과 탐색
+            for (let r = 0; r < ROWS; r++) {
+                for (let c = 0; c < COLS; c++) {
+                    const apple = grid[r][c];
+                    if (apple.isCleared) continue;
+
+                    const appleX = c * CELL_W + CELL_W / 2;
+                    const appleY = r * CELL_H + CELL_H / 2;
+
+                    // 사과의 중심점이 드래그 영역 안에 들어왔는지 검사
+                    if (appleX >= x1 && appleX <= x2 && appleY >= y1 && appleY <= y2) {
+                        sum += apple.number;
+                        selectedApples.push(apple);
+                    }
+                }
+            }
+
+            // 숫자의 합이 정확히 10이면 제거 처리 및 점수 획득
+            if (sum === 10 && selectedApples.length > 0) {
+                selectedApples.forEach(apple => apple.isCleared = true);
+                score += selectedApples.length;
+                scoreElement.innerText = score;
+            }
+
+            draw();
+        }
+
+        // 마우스 및 터치 이벤트 리스너 등록
+        canvas.addEventListener('mousedown', onStart);
+        canvas.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onEnd);
+
+        canvas.addEventListener('touchstart', onStart, { passive: false });
+        canvas.addEventListener('touchmove', onMove, { passive: false });
+        window.addEventListener('touchend', onEnd);
+
+        // 게임 시작
+        initGame();
+    </script>
+</body>
+</html>
